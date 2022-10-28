@@ -15,7 +15,7 @@ const uuidv4 = require('uuid/v4');
     const entries = await fg(["./batch/*.json"], { dot: false })
     for (const file of entries) {
         const orderMeta = JSON.parse(await readFile(file, 'binary'));
-        console.log(`Processing ${file} ${orderMeta.orderNumber}`);
+        console.log(`Processing-ReOrder ${file} ${orderMeta.orderNumber}`);
 
         const orderResponse = await getOrder(orderMeta.orderNumber);
         if (!orderResponse.Order) {
@@ -34,6 +34,12 @@ const uuidv4 = require('uuid/v4');
         if (refund.IsProcessed == "Cancelled") {
             console.log(`${orderMeta.orderNumber} RefundId ${orderMeta.refundId} Refund Already Cancelled - Can not continue`);
             moveFileToFailed(file);
+            continue;
+        }
+
+        if (refund.IsProcessed == "Completed") {
+            console.log(`${orderMeta.orderNumber} RefundId ${orderMeta.refundId} Refund Already Refunded - Can not continue`);
+            moveFileToAlreadyRefunded(file);
             continue;
         }
 
@@ -73,7 +79,7 @@ const uuidv4 = require('uuid/v4');
         }
 
         await insertLog(orderMeta.orderNumber, `COLs from Order to Re-Order, Re-Order Order Number ${orderCreateResponse.OrderNumber}`);
-        await writeFile("reorder.csv", `${orderMeta.orderNumber},${orderCreateResponse.OrderNumber}`);
+        await writeFile("reorder.csv", `${orderMeta.orderNumber},${orderCreateResponse.OrderNumber}, "${orderItemsSkus.join(",")}"`);
         await moveFileToDone(file);
     }
 })();
@@ -215,6 +221,10 @@ async function moveFileToDone(file) {
 
 async function moveFileToFailed(file) {
     await fs.promises.rename(file, `./batch/failed/${path.parse(file).base}`);
+}
+
+async function moveFileToAlreadyRefunded(file) {
+    await fs.promises.rename(file, `./batch/already-refunded/${path.parse(file).base}`);
 }
 
 function mapReOrderRequest(orderDetail, skus) {

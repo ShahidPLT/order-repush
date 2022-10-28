@@ -80,3 +80,4 @@ src/lambda/dist/*
 *.csv
 batch/*
 .DS_Store
+split
