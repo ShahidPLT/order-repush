@@ -7,7 +7,7 @@ const fs = require("fs");
 const axios = require('axios');
 var _ = require('lodash');
 const fg = require("fast-glob");
-const { readFile, writeFile } = require('fs/promises');
+const { readFile, writeFile, appendFile } = require('fs/promises');
 const path = require("path");
 const uuidv4 = require('uuid/v4');
 
@@ -20,26 +20,26 @@ const uuidv4 = require('uuid/v4');
         const orderResponse = await getOrder(orderMeta.orderNumber);
         if (!orderResponse.Order) {
             console.log(`Order Not Exist ${orderMeta.orderNumber}`);
-            moveFileToFailed(file);
+            await moveFileToFailed(file);
             continue;
         }
 
         const refund = await getRefundById(orderMeta.refundId);
         if (!refund) {
             console.log(`${orderMeta.orderNumber} RefundId ${orderMeta.refundId} Not Found`);
-            moveFileToFailed(file);
+            await moveFileToFailed(file);
             continue;
         }
 
         if (refund.IsProcessed == "Cancelled") {
             console.log(`${orderMeta.orderNumber} RefundId ${orderMeta.refundId} Refund Already Cancelled - Can not continue`);
-            moveFileToFailed(file);
+            await moveFileToFailed(file);
             continue;
         }
 
         if (refund.IsProcessed == "Completed") {
             console.log(`${orderMeta.orderNumber} RefundId ${orderMeta.refundId} Refund Already Refunded - Can not continue`);
-            moveFileToAlreadyRefunded(file);
+            await moveFileToAlreadyRefunded(file);
             continue;
         }
 
@@ -47,7 +47,7 @@ const uuidv4 = require('uuid/v4');
 
         if (!isSkusExist(order, orderMeta.skus)) {
             console.log(`${orderMeta.orderNumber} One of SKU does not exist in Order`);
-            moveFileToFailed(file);
+            await moveFileToFailed(file);
             continue;
         }
 
@@ -56,14 +56,14 @@ const uuidv4 = require('uuid/v4');
         const availableSkus = getAvailableSkus(stocks);
         if (!availableSkus.length) {
             console.log(`COLs Stock not available ${orderMeta.orderNumber}`);
-            moveFileToRejected(file);
+            await moveFileToRejected(file);
             continue;
         }
 
         const allSkusAvailable = isAllSkusAvailable(orderMeta.skus, availableSkus);
         if (!allSkusAvailable) {
             console.log(`${orderMeta.orderNumber} All COLs Stock not available `);
-            moveFileToRejected(file);
+            await moveFileToRejected(file);
             continue;
         }
 
@@ -74,12 +74,13 @@ const uuidv4 = require('uuid/v4');
 
         if (!orderCreateResponse.OrderNumber) {
             console.log(`Failed to Create ReOrder ${orderMeta.OrderNumber}`);
-            moveFileToFailed(file);
+            await moveFileToFailed(file);
             continue;
         }
 
         await insertLog(orderMeta.orderNumber, `COLs from Order to Re-Order, Re-Order Order Number ${orderCreateResponse.OrderNumber}`);
-        await writeFile("reorder.csv", `${orderMeta.orderNumber},${orderCreateResponse.OrderNumber}, "${orderItemsSkus.join(",")}"`);
+        const rowLog = `${orderMeta.orderNumber},${orderCreateResponse.OrderNumber}, "${orderItemsSkus.join(",")}",\r\n`
+        await appendFile("reorder.csv", rowLog);
         await moveFileToDone(file);
     }
 })();
@@ -374,7 +375,7 @@ function getAvailableSkus(stocks) {
     return stocks.skus.map(sku => {
         const stockSku = Object.keys(sku)[0];
         const stockData = sku[stockSku];
-        const jdaStock = stockData['GB-SHE-JDA-1'] || 0;
+        //const jdaStock = stockData['GB-SHE-JDA-1'] || 0;
         const wamwasStock = stockData['GB-SHE-WAMAS-1'] || 0;
 
         if (stockData.total <= 0) {
@@ -392,13 +393,13 @@ function getAvailableSkus(stocks) {
             }
         }
 
-        if (jdaStock > 0) {
-            return {
-                allocation: 'GB-SHE-JDA-1',
-                sku: stockSku,
-                stock: jdaStock
-            }
-        }
+        // if (jdaStock > 0) {
+        //     return {
+        //         allocation: 'GB-SHE-JDA-1',
+        //         sku: stockSku,
+        //         stock: jdaStock
+        //     }
+        // }
     }).filter(Boolean);
 }
 
