@@ -81,3 +81,4 @@ src/lambda/dist/*
 batch/*
 .DS_Store
 split
+split2
